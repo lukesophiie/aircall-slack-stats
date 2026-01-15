@@ -131,7 +131,7 @@ def main() -> None:
 
     lines = []
     lines.append(
-        f"@channel this is the current talk time stats so far · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
+        f"<!channel> this is the current talk time stats so far · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
     )
     lines.append("")
 
