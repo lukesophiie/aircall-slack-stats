@@ -47,10 +47,6 @@ def post_to_slack(text: str) -> None:
     r.raise_for_status()
 
 
-def is_connected(call_obj: dict) -> bool:
-    return bool(call_obj.get("answered_at"))
-
-
 def talk_seconds(call_obj: dict) -> int:
     answered_at = call_obj.get("answered_at")
     ended_at = call_obj.get("ended_at")
@@ -103,16 +99,10 @@ def main():
                 continue
 
             direction = c.get("direction")
-            connected = is_connected(c)
-
             if direction == "outbound":
                 stats[uid]["out_total"] += 1
-                if connected:
-                    stats[uid]["out_connected"] += 1
             elif direction == "inbound":
                 stats[uid]["in_total"] += 1
-                if connected:
-                    stats[uid]["in_connected"] += 1
 
             stats[uid]["talk_s_total"] += talk_seconds(c)
 
@@ -143,21 +133,4 @@ def main():
         medal = medals.get(i, "  ")
 
         talk_m = int(stats[sid]["talk_s_total"] // 60)
-
-        out_total = stats[sid]["out_total"]
-        out_conn = stats[sid]["out_connected"]
-        out_rate = (out_conn / out_total * 100) if out_total else 0.0
-
-        in_total = stats[sid]["in_total"]
-        in_conn = stats[sid]["in_connected"]
-        in_rate = (in_conn / in_total * 100) if in_total else 0.0
-
-        lines.append(
-            f"{medal} {name}: Talk {talk_m}m | Out {out_total} ({out_conn} conn, {out_rate:.0f}%) | In {in_total} ({in_conn} conn, {in_rate:.0f}%)"
-        )
-
-    post_to_slack("\n".join(lines))
-
-
-if __name__ == "__main__":
-    main()
+        out_total = stats[sid]["out_tota_]()_
