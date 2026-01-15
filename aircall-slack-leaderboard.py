@@ -8,21 +8,10 @@ AIRCALL_API_ID = os.environ["AIRCALL_API_ID"]
 AIRCALL_API_TOKEN = os.environ["AIRCALL_API_TOKEN"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-# Bump this any time you want to confirm which version is running in Slack
-SCRIPT_VERSION = "LEADERBOARD_V2"
+SCRIPT_VERSION = "LEADERBOARD_V3"
 
-SDRS = [
-    {"id": 1811979, "name": "Candice"},  # If you want, reorder or keep as-is; leaderboard is sorted by talk time anyway
-    {"id": 1811979, "name": "Jeremy"},
-    {"id": 1731824, "name": "Dale"},
-    {"id": 1731637, "name": "Ryan"},
-    {"id": 1731817, "name": "Candice"},
-    {"id": 1731818, "name": "Marcia"},
-    {"id": 1731822, "name": "Steve"},
-]
+TZ = ZoneInfo("Australia/Brisbane")
 
-# NOTE: Fix SDRS list above. It currently contains a duplicate ID/name line.
-# Replace SDRS with the correct list below (kept here to avoid accidental mistakes):
 SDRS = [
     {"id": 1811979, "name": "Jeremy"},
     {"id": 1731824, "name": "Dale"},
@@ -30,10 +19,13 @@ SDRS = [
     {"id": 1731817, "name": "Candice"},
     {"id": 1731818, "name": "Marcia"},
     {"id": 1731822, "name": "Steve"},
+    {"id": 1731823, "name": "Jake (UK)"},
 ]
+
+# Exempt from "sad face last place" rule
+SAD_FACE_EXEMPT_IDS = {1731823}
 
 SDR_IDS = {u["id"] for u in SDRS}
-TZ = ZoneInfo("Australia/Brisbane")
 
 
 def auth_header() -> str:
@@ -56,7 +48,6 @@ def fetch_calls(from_unix: int, page: int, per_page: int = 50) -> dict:
 
 
 def post_to_slack(text: str) -> None:
-    # Slack incoming webhooks accept simple {"text": "..."} payloads
     r = requests.post(SLACK_WEBHOOK_URL, json={"text": text}, timeout=30)
     r.raise_for_status()
 
@@ -121,42 +112,46 @@ def main() -> None:
             break
         page += 1
 
+    # Leaderboard sorted by talk time desc
     leaderboard = sorted(
         SDRS, key=lambda u: stats[u["id"]]["talk_s_total"], reverse=True
     )
     medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+
+    # Determine who should get the sad face:
+    # lowest-ranked person among NON-exempt IDs
+    eligible = [u for u in leaderboard if u["id"] not in SAD_FACE_EXEMPT_IDS]
+    sad_face_id = eligible[-1]["id"] if eligible else None
 
     date_str = start_local.strftime("%a %d %b")
     upto_str = now_local.strftime("%I:%M%p").lstrip("0").lower()
 
     lines = []
     lines.append(
-        f"<!channel> this is the current talk time stats so far · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
+        f"<!channel> this is the current talk time stats so far today (Brisbane day) · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
     )
     lines.append("")
 
-last_index = len(leaderboard) - 1
+    for i, u in enumerate(leaderboard):
+        sid = u["id"]
+        name = u["name"]
+        medal = medals.get(i, "")
 
-for i, u in enumerate(leaderboard):
-    sid = u["id"]
-    name = u["name"]
-    medal = medals.get(i, "")
+        talk_m = int(stats[sid]["talk_s_total"] // 60)
+        out_total = stats[sid]["out_total"]
+        in_total = stats[sid]["in_total"]
 
-    talk_m = int(stats[sid]["talk_s_total"] // 60)
-    out_total = stats[sid]["out_total"]
-    in_total = stats[sid]["in_total"]
+        line = f"{name} {medal} : {talk_m} (mins) | {out_total} outbound | {in_total} inbound calls"
 
-    line = f"{name} {medal} : {talk_m} (mins) | {out_total} outbound | {in_total} inbound calls"
+        # Bold top 3
+        if i < 3:
+            line = f"*{line}*"
 
-    # Bold top 3
-    if i < 3:
-        line = f"*{line}*"
+        # Underline + sad face for last place (excluding exempt IDs)
+        if sad_face_id is not None and sid == sad_face_id:
+            line = f"_{line} 😢_"
 
-    # Underline last place
-    if i == last_index:
-        line = f"_{line}_"
-
-    lines.append(line)
+        lines.append(line)
 
     post_to_slack("\n".join(lines))
 
