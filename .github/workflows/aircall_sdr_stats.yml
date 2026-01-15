@@ -1,0 +1,24 @@
+name: Aircall SDR stats to Slack
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 12:00 Australia/Brisbane
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - run: python aircall_sdr_stats.py
+        env:
+          AIRCALL_API_ID: ${{ secrets.AIRCALL_API_ID }}
+          AIRCALL_API_TOKEN: ${{ secrets.AIRCALL_API_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
