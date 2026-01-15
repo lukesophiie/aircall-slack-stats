@@ -48,11 +48,11 @@ def post_to_slack(text: str) -> None:
     r.raise_for_status()
 
 
+def is_connected(call_obj: dict) -> bool:
+    return bool(call_obj.get("answered_at"))
+
+
 def talk_seconds(call_obj: dict) -> int:
-    """
-    Talk time excludes ringing:
-    - If answered_at exists and ended_at exists, use ended_at - answered_at
-    """
     answered_at = call_obj.get("answered_at")
     ended_at = call_obj.get("ended_at")
     if not answered_at or not ended_at:
@@ -77,9 +77,10 @@ def main():
     # Stats
     stats = {
         sid: {
-            "outbound": 0,
-            "inbound": 0,
-            "total_calls": 0,
+            "out_total": 0,
+            "out_connected": 0,
+            "in_total": 0,
+            "in_connected": 0,
             "talk_s_total": 0,
         }
         for sid in SDR_IDS
@@ -97,7 +98,9 @@ def main():
             if not started_at:
                 continue
 
+            started_dt = datetime.fromtimestamp(int(started_at)), timezone.utc
             started_dt = datetime.fromtimestamp(int(started_at), tz=timezone.utc)
+
             if started_dt < start_utc or started_dt > end_utc:
                 continue
 
@@ -107,12 +110,17 @@ def main():
                 continue
 
             direction = c.get("direction")
-            if direction == "outbound":
-                stats[uid]["outbound"] += 1
-            elif direction == "inbound":
-                stats[uid]["inbound"] += 1
+            connected = is_connected(c)
 
-            stats[uid]["total_calls"] += 1
+            if direction == "outbound":
+                stats[uid]["out_total"] += 1
+                if connected:
+                    stats[uid]["out_connected"] += 1
+            elif direction == "inbound":
+                stats[uid]["in_total"] += 1
+                if connected:
+                    stats[uid]["in_connected"] += 1
+
             stats[uid]["talk_s_total"] += talk_seconds(c)
 
         meta = data.get("meta", {})
@@ -122,8 +130,8 @@ def main():
 
     # Leaderboard sorted by total talk time desc
     leaderboard = sorted(
-        SDR_IDS,
-        key=lambda sid: stats[sid]["talk_s_total"],
+        SDRS,
+        key=lambda u: stats[u["id"]]["talk_s_total"],
         reverse=True,
     )
 
@@ -133,20 +141,27 @@ def main():
     upto_str = now_local.strftime("%I:%M%p").lstrip("0").lower()
 
     lines = []
-    lines.append(f"SDR leaderboard (talk time) · {date_str} · up to {upto_str} (Brisbane)")
+    lines.append(f"Aircall Sales Stats · {date_str} · up to {upto_str} (Brisbane)")
+    lines.append("Leaderboard (by talk time)")
     lines.append("")
 
-    for i, sid in enumerate(leaderboard):
+    for i, u in enumerate(leaderboard):
+        sid = u["id"]
+        name = u["name"]
         medal = medals.get(i, "  ")
-        name = SDR_NAME.get(sid, str(sid))
 
         talk_m = int(stats[sid]["talk_s_total"] // 60)
-        inbound = stats[sid]["inbound"]
-        outbound = stats[sid]["outbound"]
-        total_calls = stats[sid]["total_calls"]
+
+        out_total = stats[sid]["out_total"]
+        out_conn = stats[sid]["out_connected"]
+        out_rate = (out_conn / out_total * 100) if out_total else 0.0
+
+        in_total = stats[sid]["in_total"]
+        in_conn = stats[sid]["in_connected"]
+        in_rate = (in_conn / in_total * 100) if in_total else 0.0
 
         lines.append(
-            f"{medal} {name} | Talk: {talk_m}m | In: {inbound} | Out: {outbound} | Total: {total_calls}"
+            f"{medal} {name}: Talk {talk_m}m | Out {out_total} ({out_conn} conn, {out_rate:.0f}%) | In {in_total} ({in_conn} conn, {in_rate:.0f}%)"
         )
 
     post_to_slack("\n".join(lines))
