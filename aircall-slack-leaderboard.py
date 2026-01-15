@@ -135,18 +135,28 @@ def main() -> None:
     )
     lines.append("")
 
-    for i, u in enumerate(leaderboard):
-        sid = u["id"]
-        name = u["name"]
-        medal = medals.get(i, "")
+last_index = len(leaderboard) - 1
 
-        talk_m = int(stats[sid]["talk_s_total"] // 60)
-        out_total = stats[sid]["out_total"]
-        in_total = stats[sid]["in_total"]
+for i, u in enumerate(leaderboard):
+    sid = u["id"]
+    name = u["name"]
+    medal = medals.get(i, "")
 
-        lines.append(
-            f"{name} {medal} : {talk_m} (mins) | {out_total} outbound | {in_total} inbound calls"
-        )
+    talk_m = int(stats[sid]["talk_s_total"] // 60)
+    out_total = stats[sid]["out_total"]
+    in_total = stats[sid]["in_total"]
+
+    line = f"{name} {medal} : {talk_m} (mins) | {out_total} outbound | {in_total} inbound calls"
+
+    # Bold top 3
+    if i < 3:
+        line = f"*{line}*"
+
+    # Underline last place
+    if i == last_index:
+        line = f"_{line}_"
+
+    lines.append(line)
 
     post_to_slack("\n".join(lines))
 
