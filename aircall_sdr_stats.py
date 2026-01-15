@@ -8,7 +8,6 @@ AIRCALL_API_ID = os.environ["AIRCALL_API_ID"]
 AIRCALL_API_TOKEN = os.environ["AIRCALL_API_TOKEN"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-# SDRs to report (stable Aircall user IDs)
 SDRS = [
     {"id": 1811979, "name": "Jeremy"},
     {"id": 1731824, "name": "Dale"},
@@ -66,7 +65,6 @@ def talk_seconds(call_obj: dict) -> int:
 
 
 def main():
-    # Brisbane "today so far" window
     now_local = datetime.now(TZ)
     start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -74,13 +72,10 @@ def main():
     end_utc = now_local.astimezone(timezone.utc)
     from_unix = int(start_utc.timestamp())
 
-    # Stats
     stats = {
         sid: {
             "out_total": 0,
-            "out_connected": 0,
             "in_total": 0,
-            "in_connected": 0,
             "talk_s_total": 0,
         }
         for sid in SDR_IDS
@@ -98,9 +93,7 @@ def main():
             if not started_at:
                 continue
 
-            started_dt = datetime.fromtimestamp(int(started_at)), timezone.utc
             started_dt = datetime.fromtimestamp(int(started_at), tz=timezone.utc)
-
             if started_dt < start_utc or started_dt > end_utc:
                 continue
 
@@ -128,7 +121,6 @@ def main():
             break
         page += 1
 
-    # Leaderboard sorted by total talk time desc
     leaderboard = sorted(
         SDRS,
         key=lambda u: stats[u["id"]]["talk_s_total"],
