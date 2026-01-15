@@ -4,7 +4,6 @@ import requests
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-# Env vars
 AIRCALL_API_ID = os.environ["AIRCALL_API_ID"]
 AIRCALL_API_TOKEN = os.environ["AIRCALL_API_TOKEN"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
@@ -49,6 +48,23 @@ def post_to_slack(text: str) -> None:
     r.raise_for_status()
 
 
+def talk_seconds(call_obj: dict) -> int:
+    """
+    Talk time excludes ringing:
+    - If answered_at exists and ended_at exists, use ended_at - answered_at
+    """
+    answered_at = call_obj.get("answered_at")
+    ended_at = call_obj.get("ended_at")
+    if not answered_at or not ended_at:
+        return 0
+    try:
+        a = int(answered_at)
+        e = int(ended_at)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, e - a)
+
+
 def main():
     # Brisbane "today so far" window
     now_local = datetime.now(TZ)
@@ -56,11 +72,18 @@ def main():
 
     start_utc = start_local.astimezone(timezone.utc)
     end_utc = now_local.astimezone(timezone.utc)
-
     from_unix = int(start_utc.timestamp())
 
-    # Stats we’ll compute (outbound only)
-    stats = {sid: {"outbound": 0, "connected": 0, "talk_s": 0} for sid in SDR_IDS}
+    # Stats
+    stats = {
+        sid: {
+            "outbound": 0,
+            "inbound": 0,
+            "total_calls": 0,
+            "talk_s_total": 0,
+        }
+        for sid in SDR_IDS
+    }
 
     page = 1
     while True:
@@ -83,41 +106,48 @@ def main():
             if uid not in SDR_IDS:
                 continue
 
-            # Outbound SDR activity only
-            if c.get("direction") != "outbound":
-                continue
+            direction = c.get("direction")
+            if direction == "outbound":
+                stats[uid]["outbound"] += 1
+            elif direction == "inbound":
+                stats[uid]["inbound"] += 1
 
-            stats[uid]["outbound"] += 1
-
-            answered_at = c.get("answered_at")
-            ended_at = c.get("ended_at")
-            if answered_at:
-                stats[uid]["connected"] += 1
-                if ended_at and int(ended_at) >= int(answered_at):
-                    # talk time = ended_at - answered_at (excludes ringing)
-                    stats[uid]["talk_s"] += int(ended_at) - int(answered_at)
+            stats[uid]["total_calls"] += 1
+            stats[uid]["talk_s_total"] += talk_seconds(c)
 
         meta = data.get("meta", {})
         if not meta.get("next_page_link"):
             break
         page += 1
 
-    # Build Slack message in your chosen order (SDRS list order)
+    # Leaderboard sorted by total talk time desc
+    leaderboard = sorted(
+        SDR_IDS,
+        key=lambda sid: stats[sid]["talk_s_total"],
+        reverse=True,
+    )
+
+    medals = {0: "🥇", 1: "🥈", 2: "🥉"}
+
     date_str = start_local.strftime("%a %d %b")
-    upto_str = now_local.strftime("%-I:%M%p").lower() if "%" in "%-I" else now_local.strftime("%I:%M%p").lstrip("0").lower()
+    upto_str = now_local.strftime("%I:%M%p").lstrip("0").lower()
 
     lines = []
-    lines.append(f"SDR stats so far today · {date_str} · up to {upto_str} (Brisbane)")
+    lines.append(f"SDR leaderboard (talk time) · {date_str} · up to {upto_str} (Brisbane)")
     lines.append("")
 
-    for u in SDRS:
-        sid = u["id"]
-        name = u["name"]
+    for i, sid in enumerate(leaderboard):
+        medal = medals.get(i, "  ")
+        name = SDR_NAME.get(sid, str(sid))
+
+        talk_m = int(stats[sid]["talk_s_total"] // 60)
+        inbound = stats[sid]["inbound"]
         outbound = stats[sid]["outbound"]
-        connected = stats[sid]["connected"]
-        rate = (connected / outbound * 100) if outbound else 0.0
-        talk_m = int(stats[sid]["talk_s"] // 60)
-        lines.append(f"{name}: {outbound} outbound | {connected} connected ({rate:.0f}%) | {talk_m}m talk")
+        total_calls = stats[sid]["total_calls"]
+
+        lines.append(
+            f"{medal} {name} | Talk: {talk_m}m | In: {inbound} | Out: {outbound} | Total: {total_calls}"
+        )
 
     post_to_slack("\n".join(lines))
 
