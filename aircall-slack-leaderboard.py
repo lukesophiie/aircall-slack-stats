@@ -1,6 +1,7 @@
 import os
 import base64
 import requests
+import random
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -155,6 +156,66 @@ def main() -> None:
 
     post_to_slack("\n".join(lines))
 
+def pick_top_by_talk(leaderboard: list[dict], stats: dict) -> tuple[str, int]:
+    top = leaderboard[0]
+    top_name = top["name"]
+    top_mins = int(stats[top["id"]]["talk_s_total"] // 60)
+    return top_name, top_mins
+
+
+def pick_top_by_outbound(leaderboard: list[dict], stats: dict) -> tuple[str, int]:
+    top = max(leaderboard, key=lambda u: stats[u["id"]]["out_total"])
+    return top["name"], int(stats[top["id"]]["out_total"])
+
+
+def pick_lowest_with_dials_gt_zero(
+    leaderboard: list[dict],
+    stats: dict,
+    exempt_ids: set[int],
+) -> tuple[str, int] | None:
+    eligible = [
+        u for u in leaderboard
+        if u["id"] not in exempt_ids and stats[u["id"]]["out_total"] > 0
+    ]
+    if not eligible:
+        return None
+    low = min(eligible, key=lambda u: stats[u["id"]]["talk_s_total"])
+    return low["name"], int(stats[low["id"]]["talk_s_total"] // 60)
+
+
+def coaching_line(
+    leaderboard: list[dict],
+    stats: dict,
+    sad_face_exempt_ids: set[int],
+) -> str:
+    top_name, top_mins = pick_top_by_talk(leaderboard, stats)
+    top_dials_name, top_dials = pick_top_by_outbound(leaderboard, stats)
+    low = pick_lowest_with_dials_gt_zero(leaderboard, stats, sad_face_exempt_ids)
+
+    low_name = low[0] if low else None
+
+    # 10 variations, some talk-time shoutouts, some dials shoutouts, some gentle nudge
+    templates = [
+        lambda: f"🔥 Big shoutout to {top_name} for {top_mins} mins on the phone so far. Let’s keep the energy up and finish strong 💪",
+        lambda: f"🏆 {top_name} is leading talk time with {top_mins} mins. Love the hustle team, keep stacking quality convos 📞✨",
+        lambda: f"🚀 Pace-setter today is {top_name}: {top_mins} mins talk time. Keep the momentum rolling into the afternoon 🌤️",
+        lambda: f"📣 Huge effort from {top_name} with {top_mins} mins. Everyone aim for one more solid block of calls 🎯",
+        lambda: f"📞 Love the dial activity from {top_dials_name}: {top_dials} outbound. Let’s turn the volume into booked wins ✅",
+        lambda: f"🥇 {top_name} out front on talk time ({top_mins} mins). Team, stay consistent and keep pushing 📈",
+        lambda: f"🌟 Shoutout {top_name} for {top_mins} mins talk time so far. Great work, let’s have a big rest of the day 🙌",
+        lambda: (
+            f"👀 We can lift the pace a bit. {low_name}, let’s pick it up from here and get a strong run home 💥"
+            if low_name else
+            f"✅ Looking good so far. Keep the calls tight, the notes clean, and the energy high 🔥"
+        ),
+        lambda: (
+            f"⏱️ Quick reset: {top_name} leads talk time ({top_mins} mins). If you’re on the board today, push for a few more quality dials 📞💪"
+            if low_name else
+            f"⏱️ Quick reset: {top_name} leads talk time ({top_mins} mins). Keep building momentum 📞💪"
+        ),
+    ]
+
+    return random.choice(templates)()
 
 if __name__ == "__main__":
     main()
