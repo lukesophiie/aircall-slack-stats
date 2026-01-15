@@ -17,7 +17,7 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - run: python aircall_sdr_stats.py
+      - run: python aircall-slack-leaderboard.py
         env:
           AIRCALL_API_ID: ${{ secrets.AIRCALL_API_ID }}
           AIRCALL_API_TOKEN: ${{ secrets.AIRCALL_API_TOKEN }}
