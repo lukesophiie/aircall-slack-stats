@@ -9,7 +9,7 @@ AIRCALL_API_ID = os.environ["AIRCALL_API_ID"]
 AIRCALL_API_TOKEN = os.environ["AIRCALL_API_TOKEN"]
 SLACK_WEBHOOK_URL = os.environ["SLACK_WEBHOOK_URL"]
 
-SCRIPT_VERSION = "LEADERBOARD_V4"
+SCRIPT_VERSION = "LEADERBOARD_V5"
 
 TZ = ZoneInfo("Australia/Brisbane")
 
@@ -22,9 +22,6 @@ SDRS = [
     {"id": 1731822, "name": "Steve"},
     {"id": 1731823, "name": "Jake (UK)"},
 ]
-
-# Exempt from "sad face last place" rule (and from "pick it up" callout)
-SAD_FACE_EXEMPT_IDS = {1731823}
 
 SDR_IDS = {u["id"] for u in SDRS}
 
@@ -78,50 +75,21 @@ def pick_top_by_outbound(leaderboard: list[dict], stats: dict) -> tuple[str, int
     return top["name"], int(stats[top["id"]]["out_total"])
 
 
-def pick_lowest_with_dials_gt_zero(
-    leaderboard: list[dict],
-    stats: dict,
-    exempt_ids: set[int],
-) -> tuple[str, int] | None:
-    eligible = [
-        u for u in leaderboard
-        if u["id"] not in exempt_ids and stats[u["id"]]["out_total"] > 0
-    ]
-    if not eligible:
-        return None
-    low = min(eligible, key=lambda u: stats[u["id"]]["talk_s_total"])
-    return low["name"], int(stats[low["id"]]["talk_s_total"] // 60)
-
-
-def coaching_line(
-    leaderboard: list[dict],
-    stats: dict,
-    sad_face_exempt_ids: set[int],
-) -> str:
+def coaching_line(leaderboard: list[dict], stats: dict) -> str:
     top_name, top_mins = pick_top_by_talk(leaderboard, stats)
     top_dials_name, top_dials = pick_top_by_outbound(leaderboard, stats)
-    low = pick_lowest_with_dials_gt_zero(leaderboard, stats, sad_face_exempt_ids)
-    low_name = low[0] if low else None
 
     templates = [
         lambda: f"🔥 Big shoutout to {top_name} for {top_mins} mins on the phone so far. Let’s keep the energy up and finish strong 💪",
         lambda: f"🏆 {top_name} is leading talk time with {top_mins} mins. Love the hustle team, keep stacking quality convos 📞✨",
         lambda: f"🚀 Pace-setter today is {top_name}: {top_mins} mins talk time. Keep the momentum rolling into the afternoon 🌤️",
         lambda: f"📣 Huge effort from {top_name} with {top_mins} mins. Everyone aim for one more solid block of calls 🎯",
-        lambda: f"⚡️ Top dials so far: {top_dials_name} with {top_dials} outbound. Keep it up and bring the team with you 🚀",
+        lambda: f"⚡️ Top dials so far: {top_dials_name} with {top_dials} outbound. Keep it up team 🚀",
         lambda: f"📞 Love the dial activity from {top_dials_name}: {top_dials} outbound. Let’s turn the volume into booked wins ✅",
         lambda: f"🥇 {top_name} out front on talk time ({top_mins} mins). Team, stay consistent and keep pushing 📈",
         lambda: f"🌟 Shoutout {top_name} for {top_mins} mins talk time so far. Great work, let’s have a big rest of the day 🙌",
-        lambda: (
-            f"👀 We can lift the pace a bit. {low_name}, let’s pick it up from here and get a strong run home 💥"
-            if low_name else
-            f"✅ Looking good so far. Keep the calls tight, the notes clean, and the energy high 🔥"
-        ),
-        lambda: (
-            f"⏱️ Quick reset: {top_name} leads talk time ({top_mins} mins). If you’re on the board today, push for a few more quality dials 📞💪"
-            if low_name else
-            f"⏱️ Quick reset: {top_name} leads talk time ({top_mins} mins). Keep building momentum 📞💪"
-        ),
+        lambda: f"⏱️ Quick reset: {top_name} leads talk time ({top_mins} mins). Keep building momentum 📞💪",
+        lambda: f"✅ Looking good so far. Keep the calls tight, the notes clean, and the energy high 🔥",
     ]
 
     return random.choice(templates)()
@@ -174,25 +142,17 @@ def main() -> None:
             break
         page += 1
 
-    # Primary sort key: talk time desc
-    # Exclude anyone with 0 outbound dials from the leaderboard section
+    # Ranked leaderboard: only people with >0 outbound
     leaderboard = sorted(
         [u for u in SDRS if stats[u["id"]]["out_total"] > 0],
         key=lambda u: stats[u["id"]]["talk_s_total"],
         reverse=True,
     )
 
-    # We'll list excluded people separately (so they still appear, but not ranked/shamed)
+    # Not ranked: 0 outbound
     excluded = [u for u in SDRS if stats[u["id"]]["out_total"] == 0]
 
     medals = {0: "🥇", 1: "🥈", 2: "🥉"}
-
-    # Sad face goes to the lowest-ranked person among:
-    # - in the leaderboard (so out_total > 0),
-    # - not exempt IDs (Jake),
-    # - and not empty leaderboard
-    eligible_for_sad = [u for u in leaderboard if u["id"] not in SAD_FACE_EXEMPT_IDS]
-    sad_face_id = eligible_for_sad[-1]["id"] if eligible_for_sad else None
 
     date_str = start_local.strftime("%a %d %b")
     upto_str = now_local.strftime("%I:%M%p").lstrip("0").lower()
@@ -215,13 +175,9 @@ def main() -> None:
 
             line = f"{name} {medal} : {talk_m} (mins) | {out_total} outbound | {in_total} inbound calls"
 
-            # Bold top 3 (within the ranked leaderboard)
+            # Bold top 3
             if i < 3:
                 line = f"*{line}*"
-
-            # Underline + sad face for last place (excluding exempt IDs)
-            if sad_face_id is not None and sid == sad_face_id:
-                line = f"_{line} 😢_"
 
             lines.append(line)
     else:
@@ -236,10 +192,9 @@ def main() -> None:
             in_total = stats[sid]["in_total"]
             lines.append(f"{u['name']}: Talk {talk_m}m | In {in_total}")
 
-    # Coaching line (only if we have at least one ranked person)
     if leaderboard:
         lines.append("")
-        lines.append(coaching_line(leaderboard, stats, SAD_FACE_EXEMPT_IDS))
+        lines.append(coaching_line(leaderboard, stats))
 
     post_to_slack("\n".join(lines))
 
