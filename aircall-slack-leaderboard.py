@@ -159,8 +159,7 @@ def main() -> None:
 
     lines = []
     lines.append(
-        f"<!channel> this is the current talk time stats so far today (Brisbane day) · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
-    )
+        f"<!sales_team> this is the current talk time stats so far today (Brisbane day) · {date_str} · up to {upto_str} (Brisbane)
     lines.append("")
 
     if leaderboard:
