@@ -159,7 +159,7 @@ def main() -> None:
 
     lines = []
     lines.append(
-        f"<!sales_team> this is the current talk time stats so far today (Brisbane day) · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
+        f"Team, this is the current talk time stats so far today (Brisbane day) · {date_str} · up to {upto_str} (Brisbane) · {SCRIPT_VERSION}"
     )
     lines.append("")
 
