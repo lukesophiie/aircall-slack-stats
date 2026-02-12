@@ -14,7 +14,7 @@ SCRIPT_VERSION = "LEADERBOARD_V5"
 TZ = ZoneInfo("Australia/Brisbane")
 
 SDRS = [
-    {"id": 1811979, "name": "Jeremy (Banana Boy)"},
+    {"id": 1811979, "name": "Jeremy"},
     {"id": 1731824, "name": "Dale"},
     {"id": 1731637, "name": "Ryan"},
     {"id": 1731817, "name": "Candice"},
