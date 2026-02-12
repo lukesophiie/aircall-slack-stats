@@ -14,13 +14,15 @@ SCRIPT_VERSION = "LEADERBOARD_V5"
 TZ = ZoneInfo("Australia/Brisbane")
 
 SDRS = [
-    {"id": 1811979, "name": "Jeremy"},
+    {"id": 1811979, "name": "Jeremy (Banana Boy"},
     {"id": 1731824, "name": "Dale"},
     {"id": 1731637, "name": "Ryan"},
     {"id": 1731817, "name": "Candice"},
     {"id": 1731818, "name": "Marcia"},
     {"id": 1731822, "name": "Steve"},
     {"id": 1731823, "name": "Jake (UK)"},
+    {"id": 1196230, "name": "Pablo"},
+    {"id": 1843086, "name": "Manhsi"},
 ]
 
 SDR_IDS = {u["id"] for u in SDRS}
